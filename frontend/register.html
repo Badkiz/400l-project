@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register – Hostel MS</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--primary:#5C0A0A;--primary-dark:#420707;--primary-light:#f9e8e8;--border:#e0e0e0;--text:#1a1a1a;--muted:#8a8a8a}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f5f5f5;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+    .wrap{width:100%;max-width:520px}
+    .logo-row{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:28px}
+    .logo-box{width:40px;height:40px;background:var(--primary);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 14px rgba(92,10,10,.3)}
+    .logo-text{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--primary)}
+    .card{background:#fff;border-radius:14px;padding:36px 36px 28px;border:1px solid var(--border);box-shadow:0 4px 24px rgba(0,0,0,.06)}
+    .card-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px}
+    .card-sub{font-size:13.5px;color:var(--muted);margin-bottom:24px}
+    .err{display:none;background:#fde8e8;border:1px solid #f5c0c0;color:var(--primary);font-size:13px;border-radius:8px;padding:11px 14px;margin-bottom:16px;border-left:4px solid var(--primary)}
+    .suc{display:none;background:#e6f4ec;border:1px solid #a7d7b8;color:#1a6b3a;font-size:13px;border-radius:8px;padding:11px 14px;margin-bottom:16px;border-left:4px solid #16a34a}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .field{margin-bottom:15px}
+    .field label{display:block;font-size:12.5px;font-weight:600;color:#4a4a4a;margin-bottom:6px}
+    .field input{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;transition:border-color .15s,box-shadow .15s}
+    .field input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(92,10,10,.1)}
+    .req{color:var(--primary)}
+    .submit{width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:14.5px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;margin-top:6px;transition:background .15s,box-shadow .15s,transform .1s;box-shadow:0 4px 16px rgba(92,10,10,.28)}
+    .submit:hover{background:var(--primary-dark);transform:translateY(-1px);box-shadow:0 6px 20px rgba(92,10,10,.36)}
+    .submit:disabled{opacity:.55;cursor:not-allowed;transform:none}
+    .link-row{text-align:center;font-size:13.5px;color:var(--muted);margin-top:18px}
+    .link-row a{color:var(--primary);font-weight:600;text-decoration:none}
+    .link-row a:hover{text-decoration:underline}
+    @media(max-width:480px){.grid2{grid-template-columns:1fr}.card{padding:24px 20px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo-row">
+      <div class="logo-box">🏠</div>
+      <div class="logo-text">HostelMS</div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">Create Account</h2>
+      <p class="card-sub">Register as a new student</p>
+      <div class="err" id="err"></div>
+      <div class="suc" id="suc"></div>
+      <div class="field">
+        <label>Full Name <span class="req">*</span></label>
+        <input id="fullName" type="text" placeholder="e.g. Amaka Okafor"/>
+      </div>
+      <div class="field">
+        <label>Email Address <span class="req">*</span></label>
+        <input id="email" type="email" placeholder="student@university.edu.ng"/>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Matric Number</label>
+          <input id="matric" type="text" placeholder="CSC/2021/001"/>
+        </div>
+        <div class="field">
+          <label>Phone Number</label>
+          <input id="phone" type="tel" placeholder="08012345678"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Password <span class="req">*</span></label>
+        <input id="password" type="password" placeholder="Minimum 8 characters"/>
+      </div>
+      <div class="field">
+        <label>Confirm Password <span class="req">*</span></label>
+        <input id="confirm" type="password" placeholder="Re-enter your password"/>
+      </div>
+      <button class="submit" id="reg-btn">Create Account</button>
+      <div class="link-row">Already registered? <a href="login.html">Sign in</a></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    if (isLoggedIn()) window.location.href = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1) + "student-dashboard.html";
+    document.getElementById("reg-btn").addEventListener("click", async () => {
+      const fullName = document.getElementById("fullName").value.trim();
+      const email    = document.getElementById("email").value.trim();
+      const matric   = document.getElementById("matric").value.trim();
+      const phone    = document.getElementById("phone").value.trim();
+      const password = document.getElementById("password").value;
+      const confirm  = document.getElementById("confirm").value;
+      const err = document.getElementById("err");
+      const suc = document.getElementById("suc");
+      const btn = document.getElementById("reg-btn");
+      err.style.display = "none"; suc.style.display = "none";
+      if (!fullName || !email || !password) { err.textContent = "Name, email and password are required."; err.style.display = "block"; return; }
+      if (password.length < 8) { err.textContent = "Password must be at least 8 characters."; err.style.display = "block"; return; }
+      if (password !== confirm) { err.textContent = "Passwords do not match."; err.style.display = "block"; return; }
+      btn.textContent = "Creating account…"; btn.disabled = true;
+      try {
+        const data = await apiFetch("/auth/register", { method: "POST", body: JSON.stringify({ fullName, email, password, matricNumber: matric || null, phoneNumber: phone || null }) });
+        saveAuth(data);
+        suc.textContent = "Account created! Redirecting to your dashboard…"; suc.style.display = "block";
+        speak("Account created. Welcome " + data.fullName);
+        setTimeout(() => window.location.href = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1) + "student-dashboard.html", 1200);
+      } catch (e) {
+        err.textContent = e.message || "Registration failed."; err.style.display = "block"; speak(e.message);
+      } finally { btn.textContent = "Create Account"; btn.disabled = false; }
+    });
+  </script>
+</body>
+</html>

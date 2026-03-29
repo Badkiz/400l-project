@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Admin Messages</title></head>
+<body>
+<script src="config.js"></script>
+<script>
+if (!requireAuth("Admin")) throw new Error();
+const currentUser = getUser();
+let activePartnerId = null, activePartnerName = "";
+
+renderLayout("Messages", ADMIN_NAV, `
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;height:calc(100vh - 160px)">
+
+    <!-- Student list -->
+    <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border-light, #eeeeee);display:flex;align-items:center;justify-content:space-between">
+        <h3 style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text-primary,#1a1a1a)">Students</h3>
+        <span id="unread-badge" style="display:none;background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px"></span>
+      </div>
+      <input id="student-search" type="text" class="form-input" style="margin:10px 12px;width:calc(100% - 24px)" placeholder="Search students…" oninput="filterStudents()"/>
+      <div id="student-list" style="flex:1;overflow-y:auto;padding:6px 8px">
+        <p style="font-size:13px;color:var(--text-muted, #8a8a8a);padding:12px 8px">Loading conversations…</p>
+      </div>
+    </div>
+
+    <!-- Chat panel -->
+    <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:hidden">
+      <div id="chat-header" style="padding:14px 20px;border-bottom:1px solid var(--border-light, #eeeeee);display:flex;align-items:center;gap:12px;background:var(--bg-secondary, #f5f5f5)">
+        <div style="width:38px;height:38px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff" id="chat-av">?</div>
+        <div>
+          <p style="font-size:14px;font-weight:700;color:var(--text-primary,#1a1a1a)" id="chat-name">Select a student</p>
+          <p style="font-size:11.5px;color:var(--text-muted, #8a8a8a)" id="chat-email">—</p>
+        </div>
+      </div>
+
+      <div id="msgs-area" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div class="empty-state"><div class="icon">💬</div><p>Select a student from the left to view their messages.</p></div>
+      </div>
+
+      <div style="padding:14px 16px;border-top:1px solid var(--border-light, #eeeeee);display:flex;gap:10px">
+        <input id="msg-input" type="text" class="form-input" style="flex:1" placeholder="Reply to student…" disabled/>
+        <button id="send-btn" class="btn btn-primary" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+`, "admin-messages.html");
+
+let allConvs = [];
+
+async function loadConversations() {
+  try {
+    allConvs = await apiFetch("/message/conversations") || [];
+    const total = allConvs.reduce((s, c) => s + c.unreadCount, 0);
+    const badge = document.getElementById("unread-badge");
+    if (total > 0) { badge.textContent = `${total} unread`; badge.style.display = "inline"; }
+    renderStudentList(allConvs);
+  } catch (e) {
+    document.getElementById("student-list").innerHTML = `<p style="font-size:13px;color:#ef4444;padding:12px 8px">${e.message}</p>`;
+  }
+}
+
+function filterStudents() {
+  const q = document.getElementById("student-search").value.toLowerCase();
+  renderStudentList(allConvs.filter(c => c.userName.toLowerCase().includes(q) || c.userEmail.toLowerCase().includes(q)));
+}
+
+function renderStudentList(convs) {
+  const list = document.getElementById("student-list");
+  if (!convs.length) {
+    list.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="icon" style="font-size:28px">💬</div><p>No student conversations yet.</p></div>`;
+    return;
+  }
+  list.innerHTML = convs.map(c => `
+    <div id="cv-${c.userId}" onclick="openConv(${c.userId},'${c.userName}','${c.userEmail}')"
+      style="cursor:pointer;padding:12px 10px;border-radius:10px;margin-bottom:3px;transition:background .12s;background:${activePartnerId===c.userId?'var(--primary-light)':'transparent'}"
+      onmouseover="this.style.background='var(--bg-secondary, #f5f5f5)'" onmouseout="this.style.background=activePartnerId===${c.userId}?'var(--primary-light)':'transparent'">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${c.userName[0]}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <p style="font-size:13.5px;font-weight:600;color:var(--text-primary,#1a1a1a)">${c.userName}</p>
+            ${c.unreadCount > 0 ? `<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px">${c.unreadCount}</span>` : ""}
+          </div>
+          <p style="font-size:11.5px;color:var(--text-muted, #8a8a8a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.lastMessage?.text || "No messages"}</p>
+        </div>
+      </div>
+    </div>`).join("");
+}
+
+async function openConv(partnerId, name, email) {
+  activePartnerId = partnerId;
+  activePartnerName = name;
+  document.getElementById("chat-name").textContent  = name;
+  document.getElementById("chat-email").textContent = email || "Student";
+  document.getElementById("chat-av").textContent    = name[0];
+  document.getElementById("msg-input").disabled     = false;
+  document.getElementById("send-btn").disabled      = false;
+  document.getElementById("msg-input").focus();
+  renderStudentList(allConvs); // refresh highlight
+
+  const area = document.getElementById("msgs-area");
+  area.innerHTML = `<p style="text-align:center;font-size:13px;color:var(--text-muted, #8a8a8a)">Loading…</p>`;
+  try {
+    const msgs = await apiFetch(`/message/conversation/${partnerId}`) || [];
+    renderMessages(msgs);
+  } catch (e) {
+    area.innerHTML = `<p style="text-align:center;font-size:13px;color:#ef4444">${e.message}</p>`;
+  }
+}
+
+function renderMessages(msgs) {
+  const area = document.getElementById("msgs-area");
+  if (!msgs.length) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">💬</div><p>No messages in this conversation.</p></div>`;
+    return;
+  }
+  area.innerHTML = msgs.map(m => {
+    const mine = m.senderId === currentUser.id;
+    return `
+      <div style="display:flex;justify-content:${mine ? "flex-end" : "flex-start"}">
+        <div style="max-width:65%">
+          <div style="background:${mine ? "var(--text-primary, #1a1a1a)" : "var(--bg-secondary, #f5f5f5)"};color:${mine ? "#fff" : "var(--text-primary, #1a1a1a)"};
+            padding:10px 14px;border-radius:${mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px"};
+            font-size:13.5px;line-height:1.5">${m.text}</div>
+          <p style="font-size:10.5px;color:var(--text-muted, #8a8a8a);margin-top:4px;text-align:${mine ? "right" : "left"}">${formatDate(m.timestamp)}</p>
+        </div>
+      </div>`;
+  }).join("");
+  area.scrollTop = area.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById("msg-input");
+  const text = input.value.trim();
+  if (!text || !activePartnerId) return;
+  input.value = "";
+  try {
+    await apiFetch("/message", { method: "POST", body: JSON.stringify({ receiverId: activePartnerId, text }) });
+    const msgs = await apiFetch(`/message/conversation/${activePartnerId}`) || [];
+    renderMessages(msgs);
+  } catch (e) { showToast(e.message, "error"); }
+}
+
+document.getElementById("send-btn").addEventListener("click", sendMessage);
+document.getElementById("msg-input").addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+setInterval(() => { if (activePartnerId) apiFetch(`/message/conversation/${activePartnerId}`).then(renderMessages).catch(() => {}); }, 8000);
+
+loadConversations();
+</script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Paystack – Secure Checkout</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',sans-serif;background:#f0f2f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+
+    .shell{width:100%;max-width:420px}
+
+    /* ── Paystack topbar ── */
+    .ps-topbar{background:#fff;border-radius:12px 12px 0 0;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0f0f0}
+    .ps-logo{display:flex;align-items:center;gap:8px}
+    .ps-logo-mark{width:28px;height:28px;background:#01B4DA;border-radius:6px;display:flex;align-items:center;justify-content:center}
+    .ps-logo-mark svg{width:16px;height:16px}
+    .ps-logo-text{font-size:14px;font-weight:700;color:#1a1a1a;letter-spacing:-.2px}
+    .ps-lock{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#555;background:#f5f5f5;padding:4px 10px;border-radius:20px}
+
+    /* ── Main card ── */
+    .ps-card{background:#fff;padding:0 22px 24px;border-radius:0 0 12px 12px;box-shadow:0 8px 32px rgba(0,0,0,.1)}
+
+    /* Merchant info */
+    .merchant{text-align:center;padding:22px 0 18px;border-bottom:1px solid #f0f0f0;margin-bottom:20px}
+    .merchant-avatar{width:52px;height:52px;background:linear-gradient(135deg,#5C0A0A,#8a1a1a);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 10px}
+    .merchant-name{font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:2px}
+    .merchant-email{font-size:12.5px;color:#888;margin-bottom:10px}
+    .amount-display{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:2px}
+    .amount-sub{font-size:12px;color:#888}
+
+    /* Payment method tabs */
+    .method-tabs{display:flex;gap:0;margin-bottom:20px;border:1.5px solid #e8e8e8;border-radius:8px;overflow:hidden}
+    .method-tab{flex:1;padding:9px 6px;text-align:center;font-size:12px;font-weight:600;color:#888;cursor:pointer;background:#fff;transition:all .15s;border:none}
+    .method-tab.active{background:#01B4DA;color:#fff}
+    .method-tab:not(:last-child){border-right:1.5px solid #e8e8e8}
+
+    /* Card form */
+    .card-form{display:flex;flex-direction:column;gap:13px}
+    .field-label{font-size:12px;font-weight:600;color:#4a4a4a;margin-bottom:5px}
+    .field-input{width:100%;border:1.5px solid #e0e0e0;border-radius:8px;padding:11px 13px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;color:#1a1a1a;transition:border-color .15s}
+    .field-input:focus{border-color:#01B4DA;box-shadow:0 0 0 3px rgba(1,180,218,.1)}
+    .field-input::placeholder{color:#bbb}
+    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card-icons{display:flex;gap:6px;margin-bottom:2px}
+    .card-icon{width:32px;height:20px;border-radius:3px;background:#f5f5f5;border:1px solid #e8e8e8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#555}
+    .card-icon.visa{background:#1a1f71;color:#fff;font-style:italic;font-size:11px}
+    .card-icon.mc{background:#eb001b;color:#fff;font-size:8px;position:relative}
+
+    /* Pay button */
+    .pay-btn{width:100%;padding:13px;background:#01B4DA;color:#fff;border:none;border-radius:8px;font-size:14.5px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;margin-top:4px;transition:background .15s,transform .1s;letter-spacing:.2px}
+    .pay-btn:hover{background:#019dbf;transform:translateY(-1px)}
+    .pay-btn:disabled{background:#8ad8ea;cursor:not-allowed;transform:none}
+
+    /* Loading overlay */
+    .processing{display:none;text-align:center;padding:32px 0}
+    .spinner{width:44px;height:44px;border:3px solid #e8f8fc;border-top-color:#01B4DA;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .processing p{font-size:14px;color:#444;margin-bottom:6px}
+    .processing small{font-size:12px;color:#aaa}
+
+    /* Success state */
+    .success-state{display:none;text-align:center;padding:28px 0}
+    .success-icon{width:60px;height:60px;background:#e6faf0;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:28px}
+    .success-state h3{font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:6px}
+    .success-state p{font-size:13px;color:#666;margin-bottom:18px}
+    .redirect-bar{height:4px;background:#e8e8e8;border-radius:99px;overflow:hidden;margin-bottom:10px}
+    .redirect-fill{height:100%;background:#01B4DA;border-radius:99px;animation:fill 2.5s linear forwards}
+    @keyframes fill{from{width:0}to{width:100%}}
+    .redirect-note{font-size:11.5px;color:#aaa}
+
+    /* Footer */
+    .ps-footer{text-align:center;margin-top:16px;font-size:11.5px;color:#aaa;display:flex;align-items:center;justify-content:center;gap:5px}
+    .ps-footer svg{width:12px;height:12px;opacity:.5}
+
+    /* Cancel link */
+    .cancel-link{display:block;text-align:center;margin-top:12px;font-size:12.5px;color:#aaa;text-decoration:none;cursor:pointer}
+    .cancel-link:hover{color:#666}
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Topbar -->
+  <div class="ps-topbar">
+    <div class="ps-logo">
+      <div class="ps-logo-mark">
+        <svg viewBox="0 0 20 20" fill="white"><path d="M10 2C5.6 2 2 5.6 2 10s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8zm0 3c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 9c-2.2 0-4.2-1.1-5.4-2.8.7-1.1 3-1.7 5.4-1.7s4.7.6 5.4 1.7C14.2 12.9 12.2 14 10 14z"/></svg>
+      </div>
+      <span class="ps-logo-text">Paystack</span>
+    </div>
+    <div class="ps-lock">
+      <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M8 5H7V3.5C7 2.12 5.88 1 4.5 1S2 2.12 2 3.5V5H1C.45 5 0 5.45 0 6v5c0 .55.45 1 1 1h7c.55 0 1-.45 1-1V6c0-.55-.45-1-1-1zM4.5 8.5c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM6 5H3V3.5c0-.83.67-1.5 1.5-1.5S6 2.67 6 3.5V5z" fill="#555"/></svg>
+      Secured
+    </div>
+  </div>
+
+  <!-- Card -->
+  <div class="ps-card">
+
+    <!-- Merchant -->
+    <div class="merchant">
+      <div class="merchant-avatar">🏠</div>
+      <div class="merchant-name">Inclusive Hostel MS</div>
+      <div class="merchant-email" id="payer-email">student@university.edu.ng</div>
+      <div class="amount-display" id="amount-display">₦0</div>
+      <div class="amount-sub">Room <span id="room-display">—</span> payment</div>
+    </div>
+
+    <!-- Payment tabs -->
+    <div class="method-tabs">
+      <button class="method-tab active">💳 Card</button>
+      <button class="method-tab" onclick="showToast()">🏦 Bank</button>
+      <button class="method-tab" onclick="showToast()">📱 USSD</button>
+      <button class="method-tab" onclick="showToast()">📲 Transfer</button>
+    </div>
+
+    <!-- Card form -->
+    <div id="card-form" class="card-form">
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <label class="field-label">Card Number</label>
+          <div class="card-icons">
+            <div class="card-icon visa">VISA</div>
+            <div class="card-icon" style="background:#f79e1b;font-size:9px;font-weight:700;color:#fff">MC</div>
+            <div class="card-icon" style="font-size:8px">VERVE</div>
+          </div>
+        </div>
+        <input id="card-number" class="field-input" placeholder="0000  0000  0000  0000" maxlength="19" autocomplete="cc-number" inputmode="numeric"/>
+      </div>
+      <div>
+        <label class="field-label">Cardholder Name</label>
+        <input id="card-name" class="field-input" placeholder="Name on card" autocomplete="cc-name"/>
+      </div>
+      <div class="field-row">
+        <div>
+          <label class="field-label">Expiry Date</label>
+          <input id="card-expiry" class="field-input" placeholder="MM / YY" maxlength="7" inputmode="numeric"/>
+        </div>
+        <div>
+          <label class="field-label">CVV</label>
+          <input id="card-cvv" class="field-input" placeholder="•••" maxlength="4" type="password" inputmode="numeric"/>
+        </div>
+      </div>
+      <button class="pay-btn" id="pay-btn" onclick="processPayment()">
+        Pay <span id="btn-amount">₦0</span>
+      </button>
+    </div>
+
+    <!-- Processing state -->
+    <div id="processing" class="processing">
+      <div class="spinner"></div>
+      <p>Processing your payment…</p>
+      <small>Please do not close this window</small>
+    </div>
+
+    <!-- Success state -->
+    <div id="success-state" class="success-state">
+      <div class="success-icon">✅</div>
+      <h3>Payment Successful!</h3>
+      <p>Your transaction has been verified. Redirecting you back…</p>
+      <div class="redirect-bar"><div class="redirect-fill"></div></div>
+      <div class="redirect-note">Redirecting in 3 seconds…</div>
+    </div>
+
+    <!-- Cancel -->
+    <a class="cancel-link" id="cancel-link">✕ Cancel payment and go back</a>
+  </div>
+
+  <div class="ps-footer">
+    <svg viewBox="0 0 12 12" fill="#aaa"><path d="M6 0C2.7 0 0 2.7 0 6s2.7 6 6 6 6-2.7 6-6-2.7-6-6-6zm.5 9h-1V5.5h1V9zm0-4.5h-1v-1h1v1z"/></svg>
+    Secured by Paystack · Test Mode
+  </div>
+</div>
+
+<script>
+  const API_BASE = "http://localhost:5000/api";
+
+  // Read URL params
+  const params    = new URLSearchParams(window.location.search);
+  const reference = params.get("reference") || "";
+  const amount    = parseFloat(params.get("amount") || "0");
+  const email     = params.get("email") || "";
+  const room      = params.get("room") || "—";
+  const name      = params.get("name") || "";
+
+  // Populate display
+  const fmt = v => new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN",minimumFractionDigits:0}).format(v);
+  document.getElementById("amount-display").textContent = fmt(amount);
+  document.getElementById("btn-amount").textContent     = fmt(amount);
+  document.getElementById("payer-email").textContent    = email;
+  document.getElementById("room-display").textContent   = room;
+  document.getElementById("card-name").value            = name;
+
+  // Cancel
+  document.getElementById("cancel-link").addEventListener("click", () => {
+    window.location.href = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1) + `payment.html?reference=${reference}&status=cancelled`;
+  });
+
+  // Card number formatting
+  document.getElementById("card-number").addEventListener("input", e => {
+    let v = e.target.value.replace(/\D/g,"").substring(0,16);
+    e.target.value = v.replace(/(.{4})/g,"$1  ").trim();
+  });
+
+  // Expiry formatting
+  document.getElementById("card-expiry").addEventListener("input", e => {
+    let v = e.target.value.replace(/\D/g,"").substring(0,4);
+    if (v.length >= 2) v = v.substring(0,2) + " / " + v.substring(2);
+    e.target.value = v;
+  });
+
+  // Toast for non-card methods
+  function showToast() {
+    const el = document.createElement("div");
+    el.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999";
+    el.textContent = "Only card payments are available in test mode.";
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+  }
+
+  // Process payment
+  async function processPayment() {
+    const cardNum  = document.getElementById("card-number").value.replace(/\s/g,"");
+    const cardName = document.getElementById("card-name").value.trim();
+    const expiry   = document.getElementById("card-expiry").value.trim();
+    const cvv      = document.getElementById("card-cvv").value.trim();
+
+    if (cardNum.length < 16 || !cardName || !expiry || cvv.length < 3) {
+      pulse("pay-btn");
+      shake(document.getElementById("card-form"));
+      return;
+    }
+
+    // Show processing state
+    document.getElementById("card-form").style.display  = "none";
+    document.getElementById("cancel-link").style.display = "none";
+    document.getElementById("processing").style.display  = "block";
+
+    // Try to confirm with backend — if it fails, payment.html will show pending
+    try {
+      const resp = await fetch(API_BASE + "/payment/mock-confirm", {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({reference: reference})
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        console.warn("mock-confirm error:", resp.status, err);
+      }
+    } catch (networkErr) {
+      console.warn("Backend unreachable — will show pending status:", networkErr.message);
+    }
+
+    await sleep(1800);
+
+    // Show success and redirect
+    document.getElementById("processing").style.display    = "none";
+    document.getElementById("success-state").style.display = "block";
+    await sleep(2500);
+    window.location.href = "payment.html?reference=" + encodeURIComponent(reference);
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function shake(el) {
+    el.style.animation = "none";
+    el.style.transition = "transform .1s";
+    const frames = [0,-8,8,-6,6,-4,4,0];
+    let i = 0;
+    const t = setInterval(() => {
+      el.style.transform = `translateX(${frames[i]}px)`;
+      if (++i >= frames.length) { clearInterval(t); el.style.transform = ""; }
+    }, 50);
+  }
+
+  function pulse(id) {
+    const btn = document.getElementById(id);
+    btn.style.background = "#e05c5c";
+    setTimeout(() => btn.style.background = "", 600);
+  }
+</script>
+</body>
+</html>

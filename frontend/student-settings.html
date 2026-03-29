@@ -1,0 +1,110 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Student"))throw 0;
+const user=getUser();
+
+renderLayout("Settings",STUDENT_NAV,`
+<div style="max-width:600px">
+  <div class="card" style="margin-bottom:16px">
+    <h3 class="section-title">Profile Information</h3>
+    <div id="profile-status" style="display:none;margin-bottom:12px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Full Name</label><input id="p-name" class="form-input" type="text"/></div>
+      <div class="form-group"><label class="form-label">Phone Number</label><input id="p-phone" class="form-input" type="tel" placeholder="08012345678"/></div>
+      <div class="form-group"><label class="form-label">Email Address</label><input class="form-input" type="email" disabled id="p-email"/></div>
+      <div class="form-group"><label class="form-label">Matric Number</label><input class="form-input" type="text" disabled id="p-matric"/></div>
+    </div>
+    <button id="save-profile-btn" class="btn btn-primary btn-sm">Save Changes</button>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3 class="section-title">Change Password</h3>
+    <div id="pw-status" style="display:none;margin-bottom:12px"></div>
+    <div class="form-group"><label class="form-label">Current Password</label><input id="cur-pw" class="form-input" type="password" placeholder="••••••••"/></div>
+    <div class="form-group"><label class="form-label">New Password</label><input id="new-pw" class="form-input" type="password" placeholder="Min. 8 characters"/></div>
+    <div class="form-group"><label class="form-label">Confirm New Password</label><input id="cnf-pw" class="form-input" type="password" placeholder="Re-enter new password"/></div>
+    <button id="change-pw-btn" class="btn btn-primary btn-sm">Update Password</button>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3 class="section-title">Accessibility</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0">
+      <div><p style="font-size:13.5px;font-weight:600;color:#1a1a1a">Text-to-Speech</p><p style="font-size:12px;color:#888">Read page content aloud</p></div>
+      <button id="tts-toggle-btn" onclick="toggleTTSSetting()" style="width:44px;height:24px;border-radius:99px;background:#e0e0e0;border:none;cursor:pointer;position:relative;transition:background .2s">
+        <span id="tts-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="card" style="border:1.5px solid rgba(92,10,10,.2)">
+    <h3 class="section-title" style="color:#5C0A0A">Sign Out</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:14px">Sign out of your account on this device.</p>
+    <button onclick="doLogout()" class="btn btn-danger btn-sm">Sign Out</button>
+  </div>
+</div>
+`,"student-settings.html");
+
+// Load profile from API
+(async()=>{
+  try{
+    const p=await apiFetch("/profile");
+    if(p){
+      document.getElementById("p-name").value=p.fullName||"";
+      document.getElementById("p-phone").value=p.phoneNumber||"";
+      document.getElementById("p-email").value=p.email||"";
+      document.getElementById("p-matric").value=p.matricNumber||"";
+    }
+  }catch(_){}
+})();
+
+document.getElementById("save-profile-btn").addEventListener("click",async()=>{
+  const fullName=document.getElementById("p-name").value.trim();
+  const phoneNumber=document.getElementById("p-phone").value.trim();
+  const st=document.getElementById("profile-status");
+  const btn=document.getElementById("save-profile-btn");
+  btn.textContent="Saving…";btn.disabled=true;
+  try{
+    await apiFetch("/profile",{method:"PUT",body:JSON.stringify({fullName,phoneNumber})});
+    // Update localStorage name
+    const u=getUser();if(u){u.name=fullName;localStorage.setItem("hms_user",JSON.stringify(u));}
+    st.style.cssText="display:block;background:rgba(230,244,236,.9);border:1px solid #a7d7b8;color:#1a6b3a;border-radius:7px;padding:9px 12px;font-size:13px";
+    st.textContent="Profile updated successfully.";
+    speak("Profile saved.");
+  }catch(e){
+    st.style.cssText="display:block;background:#fde8e8;border:1px solid #f5bfbf;color:#5C0A0A;border-radius:7px;padding:9px 12px;font-size:13px";
+    st.textContent=e.message;
+  }finally{btn.textContent="Save Changes";btn.disabled=false;}
+});
+
+document.getElementById("change-pw-btn").addEventListener("click",async()=>{
+  const currentPassword=document.getElementById("cur-pw").value;
+  const newPassword=document.getElementById("new-pw").value;
+  const confirm=document.getElementById("cnf-pw").value;
+  const st=document.getElementById("pw-status");
+  const btn=document.getElementById("change-pw-btn");
+  st.style.display="none";
+  if(!currentPassword||!newPassword){st.style.cssText="display:block;background:#fde8e8;border:1px solid #f5bfbf;color:#5C0A0A;border-radius:7px;padding:9px 12px;font-size:13px";st.textContent="All fields are required.";return;}
+  if(newPassword.length<8){st.style.cssText="display:block;background:#fde8e8;border:1px solid #f5bfbf;color:#5C0A0A;border-radius:7px;padding:9px 12px;font-size:13px";st.textContent="New password must be at least 8 characters.";return;}
+  if(newPassword!==confirm){st.style.cssText="display:block;background:#fde8e8;border:1px solid #f5bfbf;color:#5C0A0A;border-radius:7px;padding:9px 12px;font-size:13px";st.textContent="Passwords do not match.";return;}
+  btn.textContent="Updating…";btn.disabled=true;
+  try{
+    await apiFetch("/profile/change-password",{method:"POST",body:JSON.stringify({currentPassword,newPassword})});
+    st.style.cssText="display:block;background:rgba(230,244,236,.9);border:1px solid #a7d7b8;color:#1a6b3a;border-radius:7px;padding:9px 12px;font-size:13px";
+    st.textContent="Password changed successfully.";
+    document.getElementById("cur-pw").value="";document.getElementById("new-pw").value="";document.getElementById("cnf-pw").value="";
+    speak("Password changed.");
+  }catch(e){
+    st.style.cssText="display:block;background:#fde8e8;border:1px solid #f5bfbf;color:#5C0A0A;border-radius:7px;padding:9px 12px;font-size:13px";
+    st.textContent=e.message;
+  }finally{btn.textContent="Update Password";btn.disabled=false;}
+});
+
+function toggleTTSSetting(){
+  toggleTTS();
+  const btn=document.getElementById("tts-toggle-btn");
+  const knob=document.getElementById("tts-knob");
+  btn.style.background=ttsEnabled?"#5C0A0A":"#e0e0e0";
+  knob.style.transform=ttsEnabled?"translateX(20px)":"translateX(0)";
+}
+</script></body></html>

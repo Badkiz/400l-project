@@ -1,0 +1,114 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Student"))throw 0;
+const user=getUser();
+
+renderLayout("Dashboard",STUDENT_NAV,`
+<div>
+  <!-- Scrolling announcement ticker -->
+  <div style="background:rgba(92,10,10,.18);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:10px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;overflow:hidden">
+    <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.9);white-space:nowrap;background:rgba(92,10,10,.5);padding:3px 10px;border-radius:20px;flex-shrink:0">📢 NOTICES</span>
+    <div style="overflow:hidden;flex:1">
+      <div id="ticker" style="display:flex;gap:48px;white-space:nowrap;animation:tickerScroll 32s linear infinite;will-change:transform">
+        <span style="font-size:12.5px;color:rgba(255,255,255,.85)" id="ticker-inner">Loading announcements…</span>
+      </div>
+    </div>
+  </div>
+  <style>
+    @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+    #ticker:hover{animation-play-state:paused}
+  </style>
+
+  <!-- Welcome -->
+  <div style="background:rgba(92,10,10,.15);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:22px 24px;margin-bottom:18px">
+    <p style="font-size:12px;color:rgba(255,255,255,.62);margin-bottom:3px">Good day 👋</p>
+    <h2 style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#fff;margin-bottom:2px" id="wb-name">Welcome!</h2>
+    <p style="font-size:12.5px;color:rgba(255,255,255,.55)" id="wb-email"></p>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
+    <div class="stat-card" style="--accent:#5C0A0A"><div class="stat-label">Room</div><div class="stat-value" id="s-room">—</div><div class="stat-sub" id="s-block">—</div></div>
+    <div class="stat-card" style="--accent:#1a6b3a"><div class="stat-label">Payment</div><div class="stat-value" id="s-pay">—</div><div class="stat-sub">Last status</div></div>
+    <div class="stat-card" style="--accent:#7c4a00"><div class="stat-label">Account</div><div class="stat-value">Active</div><div class="stat-sub">Standing</div></div>
+    <div class="stat-card" style="--accent:#1a3a6b"><div class="stat-label">Messages</div><div class="stat-value" id="s-msgs">0</div><div class="stat-sub">Unread</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <h3 class="section-title">Room Allocation</h3>
+      <div id="alloc-info"><p style="font-size:13px;color:#888">Loading…</p></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">Recent Payments</h3>
+      <div id="pay-info"><p style="font-size:13px;color:#888">Loading…</p></div>
+    </div>
+  </div>
+</div>
+`,"student-dashboard.html");
+
+document.getElementById("wb-name").textContent = "Welcome, "+user.name.split(" ")[0]+"!";
+document.getElementById("wb-email").textContent = user.email;
+
+(async()=>{
+  // Ticker - load announcements
+  try{
+    const anns = await apiFetch("/announcement") || [];
+    if(anns.length){
+      const msgs = anns.map(a => `${a.isPinned?"📌 ":""}${a.title}: ${a.body}`);
+      const doubled = [...msgs, ...msgs]; // double for seamless loop
+      document.getElementById("ticker").innerHTML = doubled.map(m =>
+        `<span style="font-size:12.5px;color:rgba(255,255,255,.85)">${m}</span>`
+      ).join("");
+    }
+  }catch(_){}
+
+  // Allocation
+  try{
+    const a = await apiFetch("/allocation/mine");
+    if(a){
+      document.getElementById("s-room").textContent  = a.roomNumber;
+      document.getElementById("s-block").textContent = a.hostelBlock+" · "+a.roomType;
+      document.getElementById("alloc-info").innerHTML=`
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:13px;margin-bottom:10px">
+          <div style="background:#f8f8f8;border-radius:7px;padding:9px 10px"><p style="font-size:9.5px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px">Room</p><p style="font-weight:700;color:#1a1a1a">${a.roomNumber}</p></div>
+          <div style="background:#f8f8f8;border-radius:7px;padding:9px 10px"><p style="font-size:9.5px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px">Block</p><p style="font-weight:700;color:#1a1a1a">${a.hostelBlock}</p></div>
+          <div style="background:#f8f8f8;border-radius:7px;padding:9px 10px"><p style="font-size:9.5px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px">Type</p><p style="font-weight:700;color:#1a1a1a">${a.roomType}</p></div>
+          <div style="background:#f8f8f8;border-radius:7px;padding:9px 10px"><p style="font-size:9.5px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px">Since</p><p style="font-weight:700;color:#1a1a1a">${formatDateShort(a.allocatedAt)}</p></div>
+        </div>
+        <div style="background:rgba(230,244,236,.9);border-radius:7px;padding:8px 12px;display:flex;align-items:center;gap:8px">
+          <span style="color:#1a6b3a">✅</span>
+          <span style="font-size:12px;color:#1a6b3a;font-weight:600">Active allocation — Ref: ${a.paymentReference}</span>
+        </div>`;
+    }else{
+      document.getElementById("alloc-info").innerHTML=`
+        <div style="text-align:center;padding:18px 0">
+          <div style="font-size:28px;margin-bottom:7px">🏠</div>
+          <p style="font-size:12.5px;color:#666;line-height:1.6">No room allocated yet.<br/>Use the sidebar to browse rooms.</p>
+        </div>`;
+    }
+  }catch(_){}
+
+  // Payments
+  try{
+    const pays = await apiFetch("/payment/mine") || [];
+    if(pays.length){
+      document.getElementById("s-pay").textContent = pays[0].status;
+      document.getElementById("pay-info").innerHTML = pays.slice(0,4).map(p=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.04);font-size:13px">
+          <div><p style="font-weight:600;color:#1a1a1a">${p.roomNumber}</p><p style="font-size:11px;color:#888">${formatDateShort(p.createdAt)}</p></div>
+          <div style="text-align:right"><p style="font-weight:700;color:#1a1a1a">${formatMoney(p.amount)}</p><span class="badge ${badgeClass(p.status)}">${p.status}</span></div>
+        </div>`).join("");
+    }else{
+      document.getElementById("pay-info").innerHTML=`<p style="font-size:13px;color:#888;text-align:center;padding:18px 0">No payment history yet.</p>`;
+    }
+  }catch(_){}
+
+  // Unread messages
+  try{
+    const convs = await apiFetch("/message/conversations") || [];
+    document.getElementById("s-msgs").textContent = convs.reduce((s,c)=>s+c.unreadCount,0);
+  }catch(_){}
+})();
+</script></body></html>

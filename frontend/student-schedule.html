@@ -1,0 +1,65 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Student"))throw 0;
+
+renderLayout("Schedule & Events",STUDENT_NAV,`
+<div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 style="font-family:'Playfair Display',serif;font-size:17px;font-weight:800;color:#1a1a1a">Upcoming Events</h2>
+      <p style="font-size:12.5px;color:#777;margin-top:2px">Hostel calendar — posted by administration</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap" id="legend"></div>
+  </div>
+  <div id="events-list"><p style="font-size:13px;color:#888">Loading events…</p></div>
+</div>
+`,"student-schedule.html");
+
+const catStyle={
+  official:{color:"#5C0A0A",bg:"rgba(253,232,232,.9)",icon:"🏛",label:"Official"},
+  safety:{color:"#b45309",bg:"rgba(254,243,221,.9)",icon:"🚨",label:"Safety"},
+  social:{color:"#1a6b3a",bg:"rgba(230,244,236,.9)",icon:"🎉",label:"Social"},
+  deadline:{color:"#1a3a6b",bg:"rgba(230,236,244,.9)",icon:"⏰",label:"Deadline"},
+};
+
+(async()=>{
+  const el=document.getElementById("events-list");
+  const leg=document.getElementById("legend");
+  leg.innerHTML=Object.entries(catStyle).map(([k,s])=>`<span style="background:${s.bg};color:${s.color};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">${s.icon} ${s.label}</span>`).join("");
+  try{
+    const events=await apiFetch("/event")||[];
+    if(!events.length){el.innerHTML='<div class="empty-state"><div class="icon">📅</div><p>No events scheduled yet. Check back later.</p></div>';return;}
+    el.innerHTML='<div style="position:relative">'+
+      '<div style="position:absolute;left:64px;top:0;bottom:0;width:2px;background:rgba(0,0,0,.06)"></div>'+
+      events.map(e=>{
+        const d=new Date(e.eventDate);
+        const day=d.toLocaleDateString("en-NG",{day:"numeric"});
+        const mon=d.toLocaleDateString("en-NG",{month:"short"});
+        const s=catStyle[e.category]||catStyle.official;
+        return `<div style="display:flex;gap:16px;margin-bottom:16px;position:relative">
+          <div style="width:52px;flex-shrink:0;text-align:center;z-index:1">
+            <div style="background:${s.color};color:#fff;border-radius:9px;padding:7px 3px;box-shadow:0 3px 10px rgba(0,0,0,.2)">
+              <div style="font-size:17px;font-weight:800;line-height:1">${day}</div>
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;opacity:.85">${mon}</div>
+            </div>
+          </div>
+          <div class="card card-sm" style="flex:1;border-left:3px solid ${s.color}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+              <div>
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <h3 style="font-size:13.5px;font-weight:700;color:#1a1a1a">${e.title}</h3>
+                  <span style="background:${s.bg};color:${s.color};padding:1px 8px;border-radius:20px;font-size:10px;font-weight:600">${s.label}</span>
+                </div>
+                <p style="font-size:12.5px;color:#555;line-height:1.5">${e.description}</p>
+              </div>
+              <div style="flex-shrink:0;text-align:right">
+                <p style="font-size:12px;font-weight:600;color:#444">${e.eventTime}</p>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join("")+'</div>';
+  }catch(err){el.innerHTML=`<p style="color:#888;font-size:13px">Could not load events: ${err.message}</p>`;}
+})();
+</script></body></html>

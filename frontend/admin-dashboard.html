@@ -1,0 +1,99 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Admin"))throw 0;
+
+renderLayout("Dashboard",ADMIN_NAV,`
+<style>
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeUp .45s ease both}
+.fade-in:nth-child(1){animation-delay:.04s}
+.fade-in:nth-child(2){animation-delay:.09s}
+.fade-in:nth-child(3){animation-delay:.14s}
+.fade-in:nth-child(4){animation-delay:.19s}
+.fade-in:nth-child(5){animation-delay:.24s}
+</style>
+<div>
+  <div class="fade-in" style="background:rgba(22,4,4,.38);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:20px 22px;margin-bottom:16px">
+    <p style="font-size:11px;color:rgba(255,255,255,.55);margin-bottom:3px;text-transform:uppercase;letter-spacing:.6px">Administrator Panel</p>
+    <h2 style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#fff;margin-bottom:3px">Hostel Management Overview</h2>
+    <p style="font-size:12px;color:rgba(255,255,255,.45)">Use the sidebar to manage rooms, allocations, announcements and messages.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:16px">
+    <div class="stat-card fade-in" style="--accent:#5C0A0A"><div class="stat-label">Active Rooms</div><div class="stat-value" id="a-rooms">—</div><div class="stat-sub" id="a-rooms-sub"></div></div>
+    <div class="stat-card fade-in" style="--accent:#1a6b3a"><div class="stat-label">Available Slots</div><div class="stat-value" id="a-avail">—</div><div class="stat-sub">Open for booking</div></div>
+    <div class="stat-card fade-in" style="--accent:#7c4a00"><div class="stat-label">Occupied</div><div class="stat-value" id="a-occ">—</div><div class="stat-sub">Current residents</div></div>
+    <div class="stat-card fade-in" style="--accent:#1a3a6b"><div class="stat-label">Students</div><div class="stat-value" id="a-studs">—</div><div class="stat-sub" id="a-studs-sub"></div></div>
+    <div class="stat-card fade-in" style="--accent:#5C0A0A"><div class="stat-label">Unread</div><div class="stat-value" id="a-msgs">—</div><div class="stat-sub">Messages</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
+    <div class="card fade-in">
+      <h3 class="section-title">Recent Allocations</h3>
+      <div id="recent-allocs"><p style="font-size:13px;color:#888">Loading…</p></div>
+    </div>
+    <div class="card fade-in">
+      <h3 class="section-title">Room Occupancy</h3>
+      <div id="room-bars"><p style="font-size:13px;color:#888">Loading…</p></div>
+    </div>
+  </div>
+</div>
+`,"admin-dashboard.html");
+
+(async()=>{
+  try{
+    const rooms=await apiFetch("/room?activeOnly=false")||[];
+    const active=rooms.filter(r=>r.isActive);
+    const decom=rooms.filter(r=>!r.isActive);
+    document.getElementById("a-rooms").textContent=active.length;
+    document.getElementById("a-rooms-sub").textContent=decom.length+" decommissioned";
+    document.getElementById("a-avail").textContent=active.reduce((s,r)=>s+r.availableSlots,0);
+    document.getElementById("a-occ").textContent=active.reduce((s,r)=>s+r.occupiedSlots,0);
+
+    const bars=document.getElementById("room-bars");
+    bars.innerHTML=active.slice(0,6).map(r=>{
+      const pct=r.capacity?Math.round((r.occupiedSlots/r.capacity)*100):0;
+      const col=pct>=100?"#5C0A0A":pct>=75?"#b45309":"#1a6b3a";
+      return `<div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="font-weight:600;color:#1a1a1a">${r.roomNumber} <span style="color:#888;font-weight:400">— ${r.hostelBlock}</span></span>
+          <span style="color:#777">${r.occupiedSlots}/${r.capacity}</span>
+        </div>
+        <div style="height:5px;background:rgba(0,0,0,.07);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:0%;background:${col};border-radius:99px;transition:width 1s ease" data-w="${pct}"></div>
+        </div>
+      </div>`;
+    }).join("");
+    // Animate bars
+    setTimeout(()=>{
+      document.querySelectorAll("[data-w]").forEach(el=>{
+        el.style.width=el.getAttribute("data-w")+"%";
+      });
+    },200);
+  }catch(_){}
+
+  try{
+    const allocs=await apiFetch("/allocation")||[];
+    const active=allocs.filter(a=>a.isActive);
+    document.getElementById("a-studs").textContent=active.length;
+    document.getElementById("a-studs-sub").textContent="allocated residents";
+    const el=document.getElementById("recent-allocs");
+    if(!active.length){el.innerHTML='<div class="empty-state" style="padding:20px 0"><div class="icon">📌</div><p>No allocations yet.</p></div>';return;}
+    el.innerHTML=active.slice(0,6).map(a=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.04)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:26px;height:26px;background:#fde8e8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#5C0A0A;flex-shrink:0">${a.studentName[0]}</div>
+          <div><p style="font-size:12.5px;font-weight:600;color:#1a1a1a">${a.studentName.split(" ")[0]}</p><p style="font-size:11px;color:#888">Room ${a.roomNumber}</p></div>
+        </div>
+        <span class="badge badge-success" style="font-size:10px">Active</span>
+      </div>`).join("");
+  }catch(_){}
+
+  try{
+    const convs=await apiFetch("/message/conversations")||[];
+    document.getElementById("a-msgs").textContent=convs.reduce((s,c)=>s+c.unreadCount,0);
+  }catch(_){}
+})();
+</script></body></html>

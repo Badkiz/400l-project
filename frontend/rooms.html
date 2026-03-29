@@ -1,0 +1,211 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+<script>
+if (!requireAuth("Student")) throw 0;
+
+const NAV = [...STUDENT_NAV];
+// insert Rooms item after Dashboard
+NAV.splice(1,0,{label:"Browse Rooms",icon:"🚪",href:"rooms.html"});
+
+renderLayout("Browse Rooms", NAV, `
+<div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <input id="f-block" class="form-input" style="width:148px" placeholder="Filter by block…"/>
+      <select id="f-type" class="form-input" style="width:136px">
+        <option value="">All Types</option>
+        <option>Single</option><option>Double</option><option>Quad</option>
+      </select>
+      <select id="f-avail" class="form-input" style="width:150px">
+        <option value="">All Rooms</option>
+        <option value="yes">Available Only</option>
+        <option value="no">Full Only</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="rt-badge" style="font-size:12px;padding:4px 11px;border-radius:20px;background:#fef3dd;color:#7c4a00;font-weight:600">● Connecting…</span>
+      <span id="rooms-count" style="font-size:12px;color:#8a8a8a"></span>
+    </div>
+  </div>
+  <div id="rooms-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:16px">
+    <p style="color:#8a8a8a;font-size:13.5px;grid-column:1/-1;text-align:center;padding:40px">Loading rooms…</p>
+  </div>
+</div>
+
+<!-- Booking modal -->
+<div class="modal-overlay" id="book-modal">
+  <div class="modal-box">
+    <h3 class="modal-title">Confirm Booking</h3>
+    <div style="background:#f5f5f5;border-radius:9px;padding:16px;margin-bottom:18px">
+      ${["Room Number","Hostel Block","Room Type","Available Slots","Amount"].map(k=>`
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eeeeee;font-size:13.5px">
+          <span style="color:#6b6b6b">${k}</span>
+          <span id="m-${k.toLowerCase().replace(/ /g,'-')}" style="font-weight:700;color:#1a1a1a">—</span>
+        </div>`).join("")}
+    </div>
+    <p style="font-size:12.5px;color:#8a8a8a;margin-bottom:18px;line-height:1.6">You will be redirected to Paystack. Your room is reserved only after confirmed payment.</p>
+    <div style="display:flex;gap:9px">
+      <button onclick="closeModal()" class="btn btn-secondary" style="flex:1">Cancel</button>
+      <button id="pay-btn" onclick="proceedToPay()" class="btn btn-primary" style="flex:1">Pay with Paystack</button>
+    </div>
+  </div>
+</div>
+`, "rooms.html");
+
+["f-block","f-type","f-avail"].forEach(id => document.getElementById(id).addEventListener("input", applyFilter));
+
+let allRooms = [], selected = null;
+
+// SignalR: listens for RoomUpdated events broadcast by server after allocation
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl(`${HUB_URL}?access_token=${getToken()}`)
+  .withAutomaticReconnect().build();
+
+conn.on("RoomUpdated", ({roomId, availableSlots, occupiedSlots}) => {
+  // Server sends: { roomId, availableSlots, occupiedSlots }
+  const r = allRooms.find(x => x.id === roomId);
+  if (r) { r.availableSlots = availableSlots; r.occupiedSlots = occupiedSlots; refreshCard(roomId); }
+  showToast("Room availability updated.", "info");
+});
+conn.onreconnecting(() => setBadge("#fef3dd","#7c4a00","Reconnecting…"));
+conn.onreconnected(()  => setBadge("#e6f4ec","#1a6b3a","● Live"));
+conn.onclose(()        => setBadge("#fde8e8","#5C0A0A","Offline"));
+conn.start().then(() => setBadge("#e6f4ec","#1a6b3a","● Live")).catch(() => setBadge("#fde8e8","#5C0A0A","Offline"));
+
+function setBadge(bg, color, label) {
+  const el = document.getElementById("rt-badge");
+  el.textContent = label; el.style.background = bg; el.style.color = color;
+}
+
+async function loadRooms() {
+  try {
+    // GET /api/room  → RoomDto[]: { id, roomNumber, hostelBlock, roomType, capacity, occupiedSlots, availableSlots, price, description, isActive }
+    allRooms = await apiFetch("/room") || [];
+    applyFilter();
+  } catch (e) {
+    document.getElementById("rooms-grid").innerHTML = `<p style="color:#5C0A0A;grid-column:1/-1;text-align:center;padding:40px">${e.message}</p>`;
+  }
+}
+
+function applyFilter() {
+  const blk = document.getElementById("f-block").value.toLowerCase();
+  const typ = document.getElementById("f-type").value;
+  const av  = document.getElementById("f-avail").value;
+  let r = allRooms;
+  if (blk) r = r.filter(x => x.hostelBlock.toLowerCase().includes(blk));
+  if (typ) r = r.filter(x => x.roomType === typ);
+  if (av==="yes") r = r.filter(x => x.availableSlots > 0);
+  if (av==="no")  r = r.filter(x => x.availableSlots <= 0);
+  renderRooms(r);
+}
+
+function renderRooms(rooms) {
+  document.getElementById("rooms-count").textContent = `${rooms.length} room${rooms.length!==1?"s":""}`;
+  const grid = document.getElementById("rooms-grid");
+  if (!rooms.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🚪</div><p>No rooms match your filter.</p></div>`;
+    return;
+  }
+  grid.innerHTML = rooms.map(r => roomCard(r)).join("");
+  rooms.forEach(r => {
+    document.getElementById(`book-${r.id}`)?.addEventListener("click", () => openModal(r));
+  });
+}
+
+function roomCard(r) {
+  const full = r.availableSlots <= 0;
+  const pct  = r.capacity ? Math.round((r.occupiedSlots / r.capacity) * 100) : 0;
+  const barColor = pct>=100 ? "#5C0A0A" : pct>=70 ? "#b45309" : "#1a6b3a";
+  return `
+    <div id="card-${r.id}" class="card" style="border:1px solid ${full?"#fbd0d0":"#e0e0e0"};transition:box-shadow .14s;cursor:default"
+      onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,.09)'" onmouseout="this.style.boxShadow=''">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <p style="font-family:'Playfair Display',serif;font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:2px">${r.roomNumber}</p>
+          <p style="font-size:12px;color:#8a8a8a">${r.hostelBlock} &nbsp;·&nbsp; ${r.roomType}</p>
+        </div>
+        <span class="badge ${full?"badge-danger":"badge-success"}">${full ? "Full" : `${r.availableSlots} slot${r.availableSlots!==1?"s":""} left`}</span>
+      </div>
+      ${r.description ? `<p style="font-size:12.5px;color:#6b6b6b;margin-bottom:11px;line-height:1.5">${r.description}</p>` : ""}
+      <div style="margin-bottom:13px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a8a8a;margin-bottom:4px">
+          <span>Occupancy</span><span>${r.occupiedSlots}/${r.capacity}</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${barColor}"></div></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+        <div>
+          <span style="font-family:'Playfair Display',serif;font-size:17px;font-weight:800;color:#5C0A0A">${formatMoney(r.price)}</span>
+          <span style="font-size:11px;color:#8a8a8a">/session</span>
+        </div>
+        <button id="book-${r.id}" ${full?"disabled":""} class="btn btn-sm ${full?"btn-secondary":"btn-primary"}" style="${full?"cursor:not-allowed;opacity:.6":""}">
+          ${full ? "Unavailable" : "Book Now"}
+        </button>
+      </div>
+    </div>`;
+}
+
+function refreshCard(roomId) {
+  const r = allRooms.find(x => x.id === roomId);
+  if (!r) return;
+  const card = document.getElementById(`card-${roomId}`);
+  if (card) {
+    const next = document.createElement("div");
+    next.innerHTML = roomCard(r);
+    card.replaceWith(next.firstChild);
+    document.getElementById(`book-${r.id}`)?.addEventListener("click", () => openModal(r));
+  }
+}
+
+function openModal(room) {
+  selected = room;
+  document.getElementById("m-room-number").textContent  = room.roomNumber;
+  document.getElementById("m-hostel-block").textContent  = room.hostelBlock;
+  document.getElementById("m-room-type").textContent     = room.roomType;
+  document.getElementById("m-available-slots").textContent = `${room.availableSlots} of ${room.capacity}`;
+  document.getElementById("m-amount").textContent        = formatMoney(room.price);
+  document.getElementById("book-modal").classList.add("open");
+  speak(`Room ${room.roomNumber} in ${room.hostelBlock}. Price: ${formatMoney(room.price)}.`);
+}
+function closeModal() { document.getElementById("book-modal").classList.remove("open"); selected = null; }
+
+async function proceedToPay() {
+  if (!selected) return;
+  const btn = document.getElementById("pay-btn");
+  btn.textContent = "Initiating…"; btn.disabled = true;
+  try {
+    // POST /api/payment/initiate
+    // Returns InitiatePaymentResponse: { authorizationUrl, reference, amount }
+    const res = await apiFetch("/payment/initiate", {
+      method: "POST",
+      body: JSON.stringify({ roomId: selected.id })
+    });
+
+    if (!res || !res.reference) {
+      throw new Error("Invalid response from server. Please try again.");
+    }
+
+    speak("Redirecting to payment page.");
+
+    // Build mock URL relative to current page - works on any host/port
+    const base = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1);
+    const user = getUser();
+    const url  = base + "paystack-mock.html"
+      + "?reference=" + encodeURIComponent(res.reference)
+      + "&amount="    + encodeURIComponent(res.amount)
+      + "&email="     + encodeURIComponent(user?.email || "")
+      + "&room="      + encodeURIComponent(selected.roomNumber)
+      + "&name="      + encodeURIComponent(user?.name || "");
+
+    window.location.href = url;
+  } catch (e) {
+    showToast(e.message || "Failed to initiate payment. Is the backend running?", "error");
+    speak(e.message || "Payment failed.");
+    btn.textContent = "Pay with Paystack";
+    btn.disabled = false;
+  }
+}
+
+loadRooms();
+</script></body></html>

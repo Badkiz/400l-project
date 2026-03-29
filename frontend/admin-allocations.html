@@ -1,0 +1,93 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if (!requireAuth("Admin")) throw 0;
+
+renderLayout("View Allocations", ADMIN_NAV, `
+<div>
+  <div style="display:flex;gap:9px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
+    <input id="search" class="form-input" style="width:270px" placeholder="Search by name, matric, or room…" oninput="filterAllocs()"/>
+    <select id="f-active" class="form-input" style="width:155px" onchange="filterAllocs()">
+      <option value="">All Statuses</option><option value="active">Active Only</option><option value="inactive">Inactive Only</option>
+    </select>
+    <span id="count-lbl" style="font-size:12px;color:#8a8a8a"></span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:18px">
+    <div class="stat-card" style="--accent:#5C0A0A"><div class="stat-label">Total Allocations</div><div class="stat-value" id="al-total">—</div></div>
+    <div class="stat-card" style="--accent:#1a6b3a"><div class="stat-label">Active</div><div class="stat-value" id="al-active">—</div></div>
+    <div class="stat-card" style="--accent:#8a8a8a"><div class="stat-label">Inactive</div><div class="stat-value" id="al-inactive">—</div></div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Student</th><th>Matric No.</th><th>Room</th><th>Block</th><th>Payment Ref</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+        <tbody id="alloc-tbody"><tr><td colspan="8" style="text-align:center;padding:38px;color:#8a8a8a">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+`, "admin-allocations.html");
+
+let allAllocs = [];
+
+async function load() {
+  try {
+    // GET /api/allocation  → AllocationDto[]
+    // Fields: { id, userId, studentName, studentEmail, matricNumber, roomId, roomNumber, hostelBlock, roomType, paymentId, paymentReference, isActive, allocatedAt }
+    allAllocs = await apiFetch("/allocation") || [];
+    document.getElementById("al-total").textContent    = allAllocs.length;
+    document.getElementById("al-active").textContent   = allAllocs.filter(a=>a.isActive).length;
+    document.getElementById("al-inactive").textContent = allAllocs.filter(a=>!a.isActive).length;
+    render(allAllocs);
+  } catch (e) { showToast(e.message,"error"); }
+}
+
+function filterAllocs() {
+  const q  = document.getElementById("search").value.toLowerCase();
+  const st = document.getElementById("f-active").value;
+  let r = allAllocs;
+  if (q) r = r.filter(a =>
+    a.studentName.toLowerCase().includes(q) ||
+    (a.matricNumber||"").toLowerCase().includes(q) ||
+    a.roomNumber.toLowerCase().includes(q)
+  );
+  if (st==="active")   r = r.filter(a=>a.isActive);
+  if (st==="inactive") r = r.filter(a=>!a.isActive);
+  render(r);
+}
+
+function render(data) {
+  document.getElementById("count-lbl").textContent = `${data.length} record${data.length!==1?"s":""}`;
+  const tbody = document.getElementById("alloc-tbody");
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:44px;color:#8a8a8a"><div style="font-size:34px;margin-bottom:8px">📌</div>No allocations found.</td></tr>`; return; }
+  tbody.innerHTML = data.map(a=>`
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:9px">
+          <div style="width:30px;height:30px;background:#fde8e8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#5C0A0A;flex-shrink:0">${a.studentName[0]}</div>
+          <div><p style="font-size:13px;font-weight:600;color:#1a1a1a">${a.studentName}</p><p style="font-size:11px;color:#8a8a8a">${a.studentEmail}</p></div>
+        </div>
+      </td>
+      <td style="font-size:12px;color:#6b6b6b;font-family:monospace">${a.matricNumber||"—"}</td>
+      <td style="font-weight:700;color:#1a1a1a">${a.roomNumber}</td>
+      <td>${a.hostelBlock}</td>
+      <td style="font-size:11.5px;color:#8a8a8a;font-family:monospace">${a.paymentReference}</td>
+      <td><span class="badge ${a.isActive?"badge-success":"badge-warning"}">${a.isActive?"Active":"Inactive"}</span></td>
+      <td style="font-size:11.5px;color:#8a8a8a">${formatDateShort(a.allocatedAt)}</td>
+      <td>${a.isActive?`<button onclick="deallocate(${a.id})" class="btn btn-danger btn-sm">Remove</button>`:`<span style="font-size:12px;color:#8a8a8a">—</span>`}</td>
+    </tr>`).join("");
+}
+
+async function deallocate(id) {
+  if (!confirm("Remove this student's room allocation?")) return;
+  try {
+    // DELETE /api/allocation/{id}
+    await apiFetch(`/allocation/${id}`,{method:"DELETE"});
+    showToast("Allocation removed.","success"); load();
+  } catch (e) { showToast(e.message,"error"); }
+}
+
+load();
+</script></body></html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Admin"))throw 0;
+
+renderLayout("Announcements",ADMIN_NAV,`
+<div style="display:grid;grid-template-columns:1fr 360px;gap:18px;align-items:start">
+  <div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 class="section-title" style="margin:0">All Announcements</h2>
+      <span id="ann-count" style="font-size:12px;color:#777"></span>
+    </div>
+    <div id="ann-list"><p style="font-size:13px;color:#888">Loading…</p></div>
+  </div>
+  <div class="card" style="position:sticky;top:70px">
+    <h3 class="section-title">Post Announcement</h3>
+    <div class="form-group"><label class="form-label">Title *</label><input id="a-title" class="form-input" placeholder="e.g. Water Supply Maintenance"/></div>
+    <div class="form-group"><label class="form-label">Category *</label>
+      <select id="a-cat" class="form-input">
+        <option value="info">ℹ️ Information</option>
+        <option value="warning">⚠️ Warning</option>
+        <option value="urgent">🚨 Urgent</option>
+        <option value="notice">✅ Notice</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Message *</label><textarea id="a-body" class="form-input" rows="4" style="resize:none" placeholder="Type announcement content…"></textarea></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px">
+      <input id="a-pin" type="checkbox" style="width:14px;height:14px;accent-color:#5C0A0A"/>
+      <label class="form-label" style="margin:0">Pin this announcement</label>
+    </div>
+    <button id="post-btn" onclick="postAnn()" class="btn btn-primary" style="width:100%;justify-content:center">Post Announcement</button>
+  </div>
+</div>
+`,"admin-announcements.html");
+
+const catStyle={
+  info:{bg:"rgba(230,236,244,.9)",border:"#1a3a6b",icon:"ℹ️"},
+  warning:{bg:"rgba(254,243,221,.9)",border:"#b45309",icon:"⚠️"},
+  urgent:{bg:"rgba(253,232,232,.9)",border:"#5C0A0A",icon:"🚨"},
+  notice:{bg:"rgba(230,244,236,.9)",border:"#1a6b3a",icon:"✅"},
+};
+
+async function loadAnns(){
+  try{
+    const anns=await apiFetch("/announcement")||[];
+    document.getElementById("ann-count").textContent=`${anns.length} announcement${anns.length!==1?"s":""}`;
+    const el=document.getElementById("ann-list");
+    if(!anns.length){el.innerHTML='<div class="empty-state"><div class="icon">📢</div><p>No announcements yet. Post one using the form.</p></div>';return;}
+    el.innerHTML=anns.map(a=>{
+      const s=catStyle[a.category]||catStyle.info;
+      return `<div style="background:${s.bg};border:1.5px solid rgba(0,0,0,.06);border-left:4px solid ${s.border};border-radius:10px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px">
+              <span style="font-size:16px">${s.icon}</span>
+              <p style="font-size:13.5px;font-weight:700;color:#1a1a1a">${a.title}</p>
+              ${a.isPinned?'<span style="background:rgba(0,0,0,.1);color:#444;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:600">📌 Pinned</span>':''}
+            </div>
+            <p style="font-size:13px;color:#444;line-height:1.6">${a.body}</p>
+            <p style="font-size:11px;color:#888;margin-top:7px">Posted by ${a.createdBy} · ${formatDateShort(a.createdAt)}</p>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button onclick="togglePin(${a.id})" class="btn btn-secondary btn-sm" title="${a.isPinned?'Unpin':' Pin'}">📌</button>
+            <button onclick="deleteAnn(${a.id})" class="btn btn-danger btn-sm">Delete</button>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){showToast(e.message,"error");}
+}
+
+async function postAnn(){
+  const title=document.getElementById("a-title").value.trim();
+  const body=document.getElementById("a-body").value.trim();
+  const category=document.getElementById("a-cat").value;
+  const isPinned=document.getElementById("a-pin").checked;
+  const btn=document.getElementById("post-btn");
+  if(!title||!body){showToast("Title and message are required.","warning");return;}
+  btn.textContent="Posting…";btn.disabled=true;
+  try{
+    await apiFetch("/announcement",{method:"POST",body:JSON.stringify({title,body,category,isPinned})});
+    document.getElementById("a-title").value="";
+    document.getElementById("a-body").value="";
+    document.getElementById("a-pin").checked=false;
+    showToast("Announcement posted.","success");
+    speak("Announcement posted successfully.");
+    loadAnns();
+  }catch(e){showToast(e.message,"error");}
+  finally{btn.textContent="Post Announcement";btn.disabled=false;}
+}
+
+async function togglePin(id){
+  try{await apiFetch(`/announcement/${id}/pin`,{method:"PATCH"});loadAnns();}
+  catch(e){showToast(e.message,"error");}
+}
+
+async function deleteAnn(id){
+  if(!confirm("Delete this announcement?"))return;
+  try{await apiFetch(`/announcement/${id}`,{method:"DELETE"});showToast("Deleted.","info");loadAnns();}
+  catch(e){showToast(e.message,"error");}
+}
+
+loadAnns();
+</script></body></html>

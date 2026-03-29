@@ -1,0 +1,93 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Admin"))throw 0;
+
+renderLayout("Schedule / Events",ADMIN_NAV,`
+<div style="display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start">
+  <div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 class="section-title" style="margin:0">Hostel Events</h2>
+      <span id="ev-count" style="font-size:12px;color:#777"></span>
+    </div>
+    <div id="ev-list"><p style="font-size:13px;color:#888">Loading…</p></div>
+  </div>
+  <div class="card" style="position:sticky;top:70px">
+    <h3 class="section-title">Add Event</h3>
+    <div class="form-group"><label class="form-label">Title *</label><input id="e-title" class="form-input" placeholder="e.g. Fire Safety Drill"/></div>
+    <div class="form-group"><label class="form-label">Category *</label>
+      <select id="e-cat" class="form-input">
+        <option value="official">🏛 Official</option>
+        <option value="safety">🚨 Safety</option>
+        <option value="social">🎉 Social</option>
+        <option value="deadline">⏰ Deadline</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Date *</label><input id="e-date" class="form-input" type="date"/></div>
+      <div class="form-group"><label class="form-label">Time *</label><input id="e-time" class="form-input" placeholder="e.g. 10:00 AM"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Description *</label><textarea id="e-desc" class="form-input" rows="3" style="resize:none" placeholder="Event details…"></textarea></div>
+    <button onclick="addEvent()" class="btn btn-primary" style="width:100%;justify-content:center">Add Event</button>
+  </div>
+</div>
+`,"admin-schedule.html");
+
+const catStyle={
+  official:{color:"#5C0A0A",bg:"rgba(253,232,232,.9)",icon:"🏛"},
+  safety:{color:"#b45309",bg:"rgba(254,243,221,.9)",icon:"🚨"},
+  social:{color:"#1a6b3a",bg:"rgba(230,244,236,.9)",icon:"🎉"},
+  deadline:{color:"#1a3a6b",bg:"rgba(230,236,244,.9)",icon:"⏰"},
+};
+
+async function loadEvents(){
+  try{
+    const events=await apiFetch("/event")||[];
+    document.getElementById("ev-count").textContent=`${events.length} event${events.length!==1?"s":""}`;
+    const el=document.getElementById("ev-list");
+    if(!events.length){el.innerHTML='<div class="empty-state"><div class="icon">📅</div><p>No events yet. Add one using the form.</p></div>';return;}
+    el.innerHTML=events.map(e=>{
+      const s=catStyle[e.category]||catStyle.official;
+      const d=new Date(e.eventDate);
+      return `<div class="card card-sm" style="margin-bottom:10px;border-left:3px solid ${s.color}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px">
+              <span style="font-size:15px">${s.icon}</span>
+              <p style="font-size:13.5px;font-weight:700;color:#1a1a1a">${e.title}</p>
+            </div>
+            <p style="font-size:12.5px;color:#555;line-height:1.5;margin-bottom:5px">${e.description}</p>
+            <p style="font-size:11.5px;color:#888">${formatDateShort(e.eventDate)} · ${e.eventTime}</p>
+          </div>
+          <button onclick="deleteEvent(${e.id})" class="btn btn-danger btn-sm" style="flex-shrink:0">Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){showToast(e.message,"error");}
+}
+
+async function addEvent(){
+  const title=document.getElementById("e-title").value.trim();
+  const category=document.getElementById("e-cat").value;
+  const eventDate=document.getElementById("e-date").value;
+  const eventTime=document.getElementById("e-time").value.trim();
+  const description=document.getElementById("e-desc").value.trim();
+  if(!title||!eventDate||!eventTime||!description){showToast("All fields are required.","warning");return;}
+  try{
+    await apiFetch("/event",{method:"POST",body:JSON.stringify({title,category,eventDate,eventTime,description})});
+    document.getElementById("e-title").value="";
+    document.getElementById("e-date").value="";
+    document.getElementById("e-time").value="";
+    document.getElementById("e-desc").value="";
+    showToast("Event added.","success");loadEvents();
+  }catch(e){showToast(e.message,"error");}
+}
+
+async function deleteEvent(id){
+  if(!confirm("Delete this event?"))return;
+  try{await apiFetch(`/event/${id}`,{method:"DELETE"});showToast("Event deleted.","info");loadEvents();}
+  catch(e){showToast(e.message,"error");}
+}
+
+loadEvents();
+</script></body></html>

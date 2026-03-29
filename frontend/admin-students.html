@@ -1,0 +1,167 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>
+<script src="config.js"></script>
+<script>
+if(!requireAuth("Admin"))throw 0;
+
+renderLayout("Students",ADMIN_NAV,`
+<div>
+  <div style="display:flex;gap:9px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+    <input id="search" class="form-input" style="width:255px" placeholder="Search name, email or matric…" oninput="filterStudents()"/>
+    <select id="f-alloc" class="form-input" style="width:160px" onchange="filterStudents()">
+      <option value="">All Students</option>
+      <option value="allocated">Allocated</option>
+      <option value="unallocated">Unallocated</option>
+    </select>
+    <span id="count-lbl" style="font-size:12px;color:#777"></span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+    <div class="stat-card" style="--accent:#5C0A0A"><div class="stat-label">Total Students</div><div class="stat-value" id="s-total">—</div></div>
+    <div class="stat-card" style="--accent:#1a6b3a"><div class="stat-label">Allocated</div><div class="stat-value" id="s-alloc">—</div></div>
+    <div class="stat-card" style="--accent:#7c4a00"><div class="stat-label">Unallocated</div><div class="stat-value" id="s-unalloc">—</div></div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>
+          <th>Student</th><th>Matric No.</th><th>Phone</th>
+          <th>Allocation</th><th>Registered</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="students-tbody"><tr><td colspan="6" style="text-align:center;padding:36px;color:#888">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Student detail modal -->
+<div class="modal-overlay" id="student-modal">
+  <div class="modal-box" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 class="modal-title" style="margin:0" id="modal-student-name">Student Details</h3>
+      <button onclick="closeModal()" class="btn btn-secondary btn-sm">✕ Close</button>
+    </div>
+    <div id="modal-content"><p style="color:#888;font-size:13px">Loading…</p></div>
+  </div>
+</div>
+`,"admin-students.html");
+
+let allStudents = [];
+
+async function loadStudents(){
+  try{
+    allStudents = await apiFetch("/profile/students") || [];
+    document.getElementById("s-total").textContent   = allStudents.length;
+    document.getElementById("s-alloc").textContent   = allStudents.filter(s=>s.hasAllocation).length;
+    document.getElementById("s-unalloc").textContent = allStudents.filter(s=>!s.hasAllocation).length;
+    renderStudents(allStudents);
+  }catch(e){ showToast(e.message,"error"); }
+}
+
+function filterStudents(){
+  const q  = document.getElementById("search").value.toLowerCase();
+  const al = document.getElementById("f-alloc").value;
+  let r = allStudents;
+  if(q) r = r.filter(s=>
+    s.fullName.toLowerCase().includes(q)||
+    (s.email||"").toLowerCase().includes(q)||
+    (s.matricNumber||"").toLowerCase().includes(q)
+  );
+  if(al==="allocated")   r = r.filter(s=> s.hasAllocation);
+  if(al==="unallocated") r = r.filter(s=>!s.hasAllocation);
+  renderStudents(r);
+}
+
+function renderStudents(data){
+  document.getElementById("count-lbl").textContent = `${data.length} student${data.length!==1?"s":""}`;
+  const tbody = document.getElementById("students-tbody");
+  if(!data.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:36px;color:#888">No students found.</td></tr>'; return; }
+  tbody.innerHTML = data.map(s=>`
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:28px;height:28px;background:#fde8e8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#5C0A0A;flex-shrink:0">${s.fullName[0]}</div>
+          <div><p style="font-size:13px;font-weight:600;color:#1a1a1a">${s.fullName}</p><p style="font-size:11px;color:#888">${s.email}</p></div>
+        </div>
+      </td>
+      <td style="font-size:12px;color:#666;font-family:monospace">${s.matricNumber||"—"}</td>
+      <td style="font-size:12.5px;color:#555">${s.phoneNumber||"—"}</td>
+      <td><span class="badge ${s.hasAllocation?"badge-success":"badge-warning"}">${s.hasAllocation?"Allocated":"Unallocated"}</span></td>
+      <td style="font-size:12px;color:#888">${formatDateShort(s.createdAt)}</td>
+      <td>
+        <button onclick="viewStudent(${s.id})" class="btn btn-secondary btn-sm">View</button>
+      </td>
+    </tr>`).join("");
+}
+
+async function viewStudent(id){
+  document.getElementById("student-modal").classList.add("open");
+  document.getElementById("modal-content").innerHTML = '<p style="color:#888;font-size:13px;padding:20px 0">Loading student details…</p>';
+  try{
+    const s = await apiFetch(`/profile/students/${id}`);
+    document.getElementById("modal-student-name").textContent = s.fullName;
+    document.getElementById("modal-content").innerHTML = `
+      <!-- Profile -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        ${[["Full Name",s.fullName],["Email",s.email],["Matric No.",s.matricNumber||"—"],["Phone",s.phoneNumber||"—"],
+           ["Role","Student"],["Registered",formatDateShort(s.createdAt)]].map(([k,v])=>`
+          <div style="background:#f8f8f8;border-radius:7px;padding:10px 12px">
+            <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#888;margin-bottom:2px">${k}</p>
+            <p style="font-size:13px;font-weight:600;color:#1a1a1a">${v}</p>
+          </div>`).join("")}
+      </div>
+
+      <!-- Allocation -->
+      <div style="margin-bottom:16px">
+        <h4 style="font-family:'Playfair Display',serif;font-size:13.5px;font-weight:700;color:#1a1a1a;margin-bottom:9px">Room Allocation</h4>
+        ${s.allocation ? `
+          <div style="background:rgba(230,244,236,.9);border:1px solid rgba(26,107,58,.2);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12.5px">
+              <div><p style="color:#777;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Room</p><p style="font-weight:700;color:#1a1a1a">${s.allocation.roomNumber}</p></div>
+              <div><p style="color:#777;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Block</p><p style="font-weight:700;color:#1a1a1a">${s.allocation.hostelBlock}</p></div>
+              <div><p style="color:#777;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Since</p><p style="font-weight:700;color:#1a1a1a">${formatDateShort(s.allocation.allocatedAt)}</p></div>
+            </div>
+          </div>
+          <button onclick="cancelAllocation(${s.allocation.id},${s.id})" class="btn btn-danger btn-sm">Cancel Allocation</button>
+        ` : `<div style="background:#f8f8f8;border-radius:8px;padding:12px 14px;font-size:13px;color:#777">No active room allocation.</div>`}
+      </div>
+
+      <!-- Payments -->
+      <div style="margin-bottom:16px">
+        <h4 style="font-family:'Playfair Display',serif;font-size:13.5px;font-weight:700;color:#1a1a1a;margin-bottom:9px">Payment History (${s.payments.length})</h4>
+        ${!s.payments.length ? `<p style="font-size:13px;color:#777">No payment records.</p>` :
+          s.payments.map(p=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px">
+              <div><p style="font-weight:600;color:#1a1a1a">${p.roomNumber}</p><p style="font-size:11px;color:#888;font-family:monospace">${p.reference}</p></div>
+              <div style="text-align:right"><p style="font-weight:700;color:#1a1a1a">${formatMoney(p.amount)}</p><span class="badge ${badgeClass(p.status)}">${p.status}</span></div>
+            </div>`).join("")}
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;border-top:1px solid #eee;padding-top:14px">
+        <button onclick="messageStudent(${s.id})" class="btn btn-secondary btn-sm">💬 Message Student</button>
+      </div>`;
+  }catch(e){
+    document.getElementById("modal-content").innerHTML = `<p style="color:#5C0A0A;font-size:13px">${e.message}</p>`;
+  }
+}
+
+async function cancelAllocation(allocId, studentId){
+  if(!confirm("Cancel this student\'s room allocation? This cannot be undone."))return;
+  try{
+    await apiFetch(`/allocation/${allocId}`,{method:"DELETE"});
+    showToast("Allocation cancelled.","success");
+    viewStudent(studentId);
+    loadStudents();
+  }catch(e){ showToast(e.message,"error"); }
+}
+
+function messageStudent(studentId){
+  closeModal();
+  window.location.href = `admin-messages.html?student=${studentId}`;
+}
+
+function closeModal(){ document.getElementById("student-modal").classList.remove("open"); }
+
+loadStudents();
+</script></body></html>

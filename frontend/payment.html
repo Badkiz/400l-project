@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Payment Status – Hostel MS</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',sans-serif;background:#f5f5f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:#fff;border-radius:14px;padding:40px 36px;width:100%;max-width:420px;border:1px solid #e0e0e0;box-shadow:0 4px 24px rgba(0,0,0,.06);text-align:center}
+    .icon{font-size:52px;margin-bottom:16px}
+    .title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;margin-bottom:8px}
+    .sub{font-size:14px;color:#6b6b6b;line-height:1.6;margin-bottom:22px}
+    .info-box{background:#f5f5f5;border-radius:9px;padding:16px;margin-bottom:22px;text-align:left}
+    .info-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eeeeee;font-size:13.5px}
+    .info-row:last-child{border-bottom:none}
+    .info-key{color:#6b6b6b}
+    .info-val{font-weight:700;color:#1a1a1a;text-align:right;max-width:60%;word-break:break-all;font-size:12.5px}
+    .btn{display:block;width:100%;padding:12px;border-radius:8px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;text-align:center;text-decoration:none;transition:all .14s;margin-bottom:9px}
+    .btn-primary{background:#5C0A0A;color:#fff;box-shadow:0 3px 12px rgba(92,10,10,.25)}
+    .btn-primary:hover{background:#420707}
+    .btn-secondary{background:#f5f5f5;color:#4a4a4a;border:1px solid #e0e0e0}
+    .btn-secondary:hover{background:#ececec}
+    .ref{font-family:monospace;font-size:11.5px;color:#8a8a8a;margin-bottom:18px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spinner{width:40px;height:40px;border:3px solid #fde8e8;border-top-color:#5C0A0A;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px}
+  </style>
+</head>
+<body>
+
+  <!-- Loading -->
+  <div id="loading-state" class="card">
+    <div class="spinner"></div>
+    <h2 class="title" style="color:#1a1a1a">Verifying Payment</h2>
+    <p class="sub">Please wait while we confirm your transaction with Paystack…</p>
+  </div>
+
+  <!-- Success -->
+  <div id="success-state" class="card" style="display:none">
+    <div class="icon">✅</div>
+    <h2 class="title" style="color:#1a6b3a">Payment Successful!</h2>
+    <p class="sub">Your room has been reserved. Here are your booking details.</p>
+    <div class="info-box" id="success-info"></div>
+    <a href="student-dashboard.html" class="btn btn-primary">Go to My Dashboard</a>
+  </div>
+
+  <!-- Pending -->
+  <div id="pending-state" class="card" style="display:none">
+    <div class="icon">🕐</div>
+    <h2 class="title" style="color:#7c4a00">Payment Pending</h2>
+    <p class="sub">Your payment is being processed. Your room will be allocated automatically once confirmed.</p>
+    <p class="ref" id="pending-ref"></p>
+    <button onclick="checkPayment()" class="btn btn-secondary">Check Again</button>
+    <a href="student-dashboard.html" class="btn btn-primary">Go to Dashboard</a>
+  </div>
+
+  <!-- Failed -->
+  <div id="failed-state" class="card" style="display:none">
+    <div class="icon">❌</div>
+    <h2 class="title" style="color:#5C0A0A">Payment Failed</h2>
+    <p class="sub">Your payment was not completed. No charges were made to your account.</p>
+    <a href="rooms.html" class="btn btn-primary">Try Again</a>
+    <a href="student-dashboard.html" class="btn btn-secondary">Go to Dashboard</a>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    if (!requireAuth()) throw 0;
+
+    const params    = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+
+    function show(id) {
+      ["loading-state","success-state","pending-state","failed-state"]
+        .forEach(s => document.getElementById(s).style.display = "none");
+      document.getElementById(id).style.display = "block";
+    }
+
+    async function checkPayment() {
+      if (!reference) { show("failed-state"); speak("No payment reference found."); return; }
+      show("loading-state");
+
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        try {
+          // GET /api/payment/reference/{reference}
+          // Returns PaymentDto: { id, reference, status, amount, roomId, roomNumber, createdAt, verifiedAt }
+          const payment = await apiFetch(`/payment/reference/${encodeURIComponent(reference)}`);
+
+          if (payment.status === "Success") {
+            let allocText = "";
+            try {
+              // GET /api/allocation/mine → AllocationDto
+              const alloc = await apiFetch("/allocation/mine");
+              allocText = alloc ? `<div class="info-row"><span class="info-key">Block</span><span class="info-val">${alloc.hostelBlock}</span></div>` : "";
+            } catch (_) {}
+
+            document.getElementById("success-info").innerHTML = `
+              <div class="info-row"><span class="info-key">Reference</span><span class="info-val">${payment.reference}</span></div>
+              <div class="info-row"><span class="info-key">Amount</span><span class="info-val">${formatMoney(payment.amount)}</span></div>
+              <div class="info-row"><span class="info-key">Room</span><span class="info-val">${payment.roomNumber}</span></div>
+              ${allocText}
+              <div class="info-row"><span class="info-key">Status</span><span class="info-val" style="color:#1a6b3a">Verified ✓</span></div>`;
+            show("success-state");
+            speak("Payment successful. Your room has been allocated.");
+
+          } else if (payment.status === "Pending" && attempts < 6) {
+            setTimeout(poll, 2500);
+          } else if (payment.status === "Pending") {
+            document.getElementById("pending-ref").textContent = `Reference: ${reference}`;
+            show("pending-state");
+            speak("Payment still pending. Please check again shortly.");
+          } else {
+            show("failed-state");
+            speak("Payment failed. Please try again.");
+          }
+        } catch (e) {
+          show("failed-state");
+          speak(e.message || "An error occurred.");
+        }
+      };
+      poll();
+    }
+
+    checkPayment();
+  </script>
+</body>
+</html>
